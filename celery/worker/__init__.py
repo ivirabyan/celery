@@ -120,7 +120,7 @@ class WorkController(object):
             pool_putlocks=None, db=None, prefetch_multiplier=None,
             eta_scheduler_precision=None, disable_rate_limits=None,
             autoscale=None, autoscaler_cls=None, scheduler_cls=None,
-            app=None):
+            app=None, pidfile=None):
 
         self.app = app_or_default(app)
         conf = self.app.conf
@@ -255,11 +255,13 @@ class WorkController(object):
                                         self.beat,
                                         self.autoscaler,
                                         self.consumer))
+        self.pidfile = pidfile
 
     def start(self):
         """Starts the workers main loop."""
         self._state = self.RUN
-
+        if self.pidfile:
+            self.pidlock = platforms.create_pidlock(self.pidfile).acquire()
         try:
             for i, component in enumerate(self.components):
                 self.logger.debug("Starting thread %s...",
@@ -318,6 +320,8 @@ class WorkController(object):
             return
 
         self._state = self.CLOSE
+        if self.pidfile:
+            self.pidlock.release()
         signals.worker_shutdown.send(sender=self)
 
         for component in reversed(self.components):
